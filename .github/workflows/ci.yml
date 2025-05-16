@@ -1,4 +1,4 @@
-## A basic GitHub Actions workflow for your Quarkus application.
+## A basic GitHub Actions workflow for your Quarkus org.mies.emailbot.application.
 
 name: CI build
 

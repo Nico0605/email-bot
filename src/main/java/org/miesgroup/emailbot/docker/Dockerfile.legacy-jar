@@ -1,29 +1,29 @@
 ####
-# This Dockerfile is used in order to build a container that runs the Quarkus application in JVM mode
+# This Dockerfile is used in order to build a container that runs the Quarkus org.mies.emailbot.application in JVM mode
 #
 # Before building the container image run:
 #
-# ./mvnw package
+# ./mvnw package -Dquarkus.package.jar.type=legacy-jar
 #
 # Then, build the image with:
 #
-# docker build -f src/main/docker/Dockerfile.jvm -t quarkus/email-bot-jvm .
+# org.mies.emailbot.docker build -f src/main/org.mies.emailbot.docker/Dockerfile.legacy-jar -t quarkus/email-bot-legacy-jar .
 #
 # Then run the container using:
 #
-# docker run -i --rm -p 8080:8080 quarkus/email-bot-jvm
+# org.mies.emailbot.docker run -i --rm -p 8080:8080 quarkus/email-bot-legacy-jar
 #
-# If you want to include the debug port into your docker image
+# If you want to include the debug port into your org.mies.emailbot.docker image
 # you will have to expose the debug port (default 5005 being the default) like this :  EXPOSE 8080 5005.
 # Additionally you will have to set -e JAVA_DEBUG=true and -e JAVA_DEBUG_PORT=*:5005
 # when running the container
 #
 # Then run the container using :
 #
-# docker run -i --rm -p 8080:8080 quarkus/email-bot-jvm
+# org.mies.emailbot.docker run -i --rm -p 8080:8080 quarkus/email-bot-legacy-jar
 #
-# This image uses the `run-java.sh` script to run the application.
-# This scripts computes the command line to execute your Java application, and
+# This image uses the `run-java.sh` script to run the org.mies.emailbot.application.
+# This scripts computes the command line to execute your Java org.mies.emailbot.application, and
 # includes memory/GC tuning.
 # You can configure the behavior using the following environment properties:
 # - JAVA_OPTS: JVM options passed to the `java` command (example: "-verbose:class") - Be aware that this will override
@@ -83,11 +83,8 @@ FROM registry.access.redhat.com/ubi9/openjdk-21:1.21
 ENV LANGUAGE='en_US:en'
 
 
-# We make four distinct layers so if there are application changes the library layers can be re-used
-COPY --chown=185 target/quarkus-app/lib/ /deployments/lib/
-COPY --chown=185 target/quarkus-app/*.jar /deployments/
-COPY --chown=185 target/quarkus-app/app/ /deployments/app/
-COPY --chown=185 target/quarkus-app/quarkus/ /deployments/quarkus/
+COPY target/lib/* /deployments/lib/
+COPY target/*-runner.jar /deployments/quarkus-run.jar
 
 EXPOSE 8080
 USER 185
@@ -95,4 +92,3 @@ ENV JAVA_OPTS_APPEND="-Dquarkus.http.host=0.0.0.0 -Djava.util.logging.manager=or
 ENV JAVA_APP_JAR="/deployments/quarkus-run.jar"
 
 ENTRYPOINT [ "/opt/jboss/container/java/run/run-java.sh" ]
-

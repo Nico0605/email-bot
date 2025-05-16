@@ -4,9 +4,9 @@ This project uses Quarkus, the Supersonic Subatomic Java Framework.
 
 If you want to learn more about Quarkus, please visit its website: <https://quarkus.io/>.
 
-## Running the application in dev mode
+## Running the org.mies.emailbot.application in dev mode
 
-You can run your application in dev mode that enables live coding using:
+You can run your org.mies.emailbot.application in dev mode that enables live coding using:
 
 ```shell script
 ./mvnw quarkus:dev
@@ -14,9 +14,9 @@ You can run your application in dev mode that enables live coding using:
 
 > **_NOTE:_**  Quarkus now ships with a Dev UI, which is available in dev mode only at <http://localhost:8080/q/dev/>.
 
-## Packaging and running the application
+## Packaging and running the org.mies.emailbot.application
 
-The application can be packaged using:
+The org.mies.emailbot.application can be packaged using:
 
 ```shell script
 ./mvnw package
@@ -25,7 +25,7 @@ The application can be packaged using:
 It produces the `quarkus-run.jar` file in the `target/quarkus-app/` directory.
 Be aware that it’s not an _über-jar_ as the dependencies are copied into the `target/quarkus-app/lib/` directory.
 
-The application is now runnable using `java -jar target/quarkus-app/quarkus-run.jar`.
+The org.mies.emailbot.application is now runnable using `java -jar target/quarkus-app/quarkus-run.jar`.
 
 If you want to build an _über-jar_, execute the following command:
 
@@ -33,7 +33,7 @@ If you want to build an _über-jar_, execute the following command:
 ./mvnw package -Dquarkus.package.jar.type=uber-jar
 ```
 
-The application, packaged as an _über-jar_, is now runnable using `java -jar target/*-runner.jar`.
+The org.mies.emailbot.application, packaged as an _über-jar_, is now runnable using `java -jar target/*-runner.jar`.
 
 ## Creating a native executable
 
@@ -57,5 +57,5 @@ If you want to learn more about building native executables, please consult <htt
 
 - Hibernate ORM ([guide](https://quarkus.io/guides/hibernate-orm)): Define your persistent model with Hibernate ORM and Jakarta Persistence
 - JPAStreamer ([guide](https://quarkiverse.github.io/quarkiverse-docs/quarkus-jpastreamer/dev/)): Express your Hibernate queries as standard Java Streams
-- Hibernate ORM with Panache ([guide](https://quarkus.io/guides/hibernate-orm-panache)): Simplify your persistence code for Hibernate ORM via the active record or the repository pattern
+- Hibernate ORM with Panache ([guide](https://quarkus.io/guides/hibernate-orm-panache)): Simplify your org.mies.emailbot.persistence code for Hibernate ORM via the active record or the repository pattern
 - Mailer ([guide](https://quarkus.io/guides/mailer)): Send emails
