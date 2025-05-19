@@ -3,17 +3,14 @@ package org.miesgroup.emailbot.application;
 import io.quarkus.runtime.Quarkus;
 import io.quarkus.runtime.QuarkusApplication;
 import io.quarkus.runtime.annotations.QuarkusMain;
-import jakarta.inject.Inject;
-import org.miesgroup.emailbot.service.email.EmailManager;
+import static io.quarkus.arc.impl.UncaughtExceptions.LOGGER;
 
 @QuarkusMain
 public class WebScraper implements QuarkusApplication {
-    @Inject
-    EmailManager emailManager;
 
     @Override
     public int run(String... args) {
-        System.out.println("✅ Applicazione avviata. In attesa delle attività schedulate...");
+        LOGGER.info("✅ Applicazione avviata. In attesa delle attività schedulate...");
         Quarkus.waitForExit();
         return 0;
     }
