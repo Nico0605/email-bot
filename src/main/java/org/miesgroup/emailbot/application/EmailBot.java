@@ -6,7 +6,7 @@ import io.quarkus.runtime.annotations.QuarkusMain;
 import static io.quarkus.arc.impl.UncaughtExceptions.LOGGER;
 
 @QuarkusMain
-public class WebScraper implements QuarkusApplication {
+public class EmailBot implements QuarkusApplication {
 
     @Override
     public int run(String... args) {
@@ -16,6 +16,6 @@ public class WebScraper implements QuarkusApplication {
     }
 
     public static void main(String[] args) {
-        Quarkus.run(WebScraper.class, args);
+        Quarkus.run(EmailBot.class, args);
     }
 }
