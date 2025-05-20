@@ -27,6 +27,13 @@ public class ReportScheduler {
     void scheduledDailyEmail() {
         if (!scheduleEnabled) return;
 
+        LocalDate today = LocalDate.now();
+
+        if (today.getDayOfWeek() == DayOfWeek.SATURDAY || today.getDayOfWeek() == DayOfWeek.SUNDAY) {
+            LOGGER.info("⛔ Giorno non lavorativo, si rimanda il report mensile.");
+            return;
+        }
+
         LOGGER.info("📬 Inizio invio email giornaliere...");
         emailManager.DailyEmailAlert();
         LOGGER.info("✅ Invio email giornaliere completato.");

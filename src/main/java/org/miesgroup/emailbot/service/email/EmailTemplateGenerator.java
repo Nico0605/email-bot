@@ -17,6 +17,10 @@ public class EmailTemplateGenerator {
     public String generateAlertEmail(String clientName, String username, List<Map<String, Object>> alertDataList) {
         Map<String, List<Map<String, Object>>> alertsByType = new HashMap<>();
 
+        // Determina se almeno un alert è in modalità percentuale
+        boolean hasPercentageMode = alertDataList.stream()
+                .anyMatch(alert -> alert.get("checkModality") instanceof Boolean && (Boolean) alert.get("checkModality"));
+
         for (Map<String, Object> alert : alertDataList) {
             String type = (String) alert.get("futuresType");
             if (type == null) continue;
@@ -30,19 +34,30 @@ public class EmailTemplateGenerator {
 
         for (String type : alertsByType.keySet()) {
             List<Map<String, Object>> alerts = alertsByType.get(type);
-            double minVariation = alerts.stream()
-                    .mapToDouble(alert -> alert.get("variation") instanceof Number
-                            ? ((Number) alert.get("variation")).doubleValue()
-                            : 0.0)
-                    .min().orElse(0);
-            double maxVariation = alerts.stream()
-                    .mapToDouble(alert -> alert.get("variation") instanceof Number
-                            ? ((Number) alert.get("variation")).doubleValue()
-                            : 0.0)
-                    .max().orElse(0);
 
-            summaryContent.append("    <li>" + alerts.size() + " prodotti <strong>" + type + "</strong> con variazioni tra "
-                    + String.format("%.1f%%", minVariation) + " e " + String.format("%.1f%%", maxVariation) + "</li>\n");
+            // Controlla se ci sono alert in modalità percentuale per questo tipo
+            boolean typeHasPercentageMode = alerts.stream()
+                    .anyMatch(alert -> alert.get("checkModality") instanceof Boolean && (Boolean) alert.get("checkModality"));
+
+            if (typeHasPercentageMode) {
+                double minVariation = alerts.stream()
+                        .filter(alert -> alert.get("checkModality") instanceof Boolean && (Boolean) alert.get("checkModality"))
+                        .mapToDouble(alert -> alert.get("variation") instanceof Number
+                                ? ((Number) alert.get("variation")).doubleValue()
+                                : 0.0)
+                        .min().orElse(0);
+                double maxVariation = alerts.stream()
+                        .filter(alert -> alert.get("checkModality") instanceof Boolean && (Boolean) alert.get("checkModality"))
+                        .mapToDouble(alert -> alert.get("variation") instanceof Number
+                                ? ((Number) alert.get("variation")).doubleValue()
+                                : 0.0)
+                        .max().orElse(0);
+
+                summaryContent.append("    <li>" + alerts.size() + " prodotti <strong>" + type + "</strong> con variazioni tra "
+                        + String.format("%.1f%%", minVariation) + " e " + String.format("%.1f%%", maxVariation) + "</li>\n");
+            } else {
+                summaryContent.append("    <li>" + alerts.size() + " prodotti <strong>" + type + "</strong> fuori soglia</li>\n");
+            }
         }
 
         summaryContent.append("</ul>\n");
@@ -51,14 +66,23 @@ public class EmailTemplateGenerator {
         for (String type : alertsByType.keySet()) {
             List<Map<String, Object>> alerts = alertsByType.get(type);
 
+            // Controlla se ci sono alert in modalità percentuale per questo tipo
+            boolean typeHasPercentageMode = alerts.stream()
+                    .anyMatch(alert -> alert.get("checkModality") instanceof Boolean && (Boolean) alert.get("checkModality"));
+
             tablesContent.append("<p class=\"table-title\">Alert prodotti " + type + "</p>\n");
             tablesContent.append("<table class=\"price-table\">\n");
             tablesContent.append("    <thead>\n");
             tablesContent.append("        <tr>\n");
             tablesContent.append("            <th>" + (type.equals("Yearly") ? "Anno" : "Periodo") + "</th>\n");
-            tablesContent.append("            <th>Prezzo attuale (€/MWh)</th>\n");
-            tablesContent.append("            <th>Prezzo giorno precedente (€/MWh)</th>\n");
-            tablesContent.append("            <th>Variazione</th>\n");
+            tablesContent.append("            <th>Prezzo ieri (€/MWh)</th>\n");
+
+            // Mostra le colonne aggiuntive solo se ci sono alert in modalità percentuale
+            if (typeHasPercentageMode) {
+                tablesContent.append("            <th>Prezzo altro ieri (€/MWh)</th>\n");
+                tablesContent.append("            <th>Variazione</th>\n");
+            }
+
             tablesContent.append("            <th>Status</th>\n");
             tablesContent.append("        </tr>\n");
             tablesContent.append("    </thead>\n");
@@ -94,13 +118,14 @@ public class EmailTemplateGenerator {
                 tablesContent.append("            <td>" + label + "</td>\n");
                 tablesContent.append("            <td>" + String.format("%.2f", price) + "</td>\n");
 
-                // Mostra il prezzo precedente solo se in modalità percentuale
+                // Mostra i campi relativi alla variazione solo se in modalità percentuale
                 if (isPercentageMode) {
                     tablesContent.append("            <td>" + String.format("%.2f", previousPrice) + "</td>\n");
                     tablesContent.append("            <td class=\"" + variationClass + "\">" + String.format("%.1f%%", variation) + "</td>\n");
-                } else {
-                    tablesContent.append("            <td>N/A</td>\n");
-                    tablesContent.append("            <td>N/A</td>\n");
+                } else if (typeHasPercentageMode) {
+                    // Se il tipo ha modalità percentuale ma questo alert specifico no, aggiungiamo celle vuote
+                    tablesContent.append("            <td>-</td>\n");
+                    tablesContent.append("            <td>-</td>\n");
                 }
 
                 tablesContent.append("            <td><span class=\"alert-icon\">⚠️</span> Fuori soglia<br><small>" + thresholdDescription + "</small></td>\n");
@@ -130,7 +155,9 @@ public class EmailTemplateGenerator {
                 "        <div class=\"content\">\n" +
                 "            <h2>Buongiorno " + clientName + ",</h2>\n" +
                 "            <div class=\"alert-message\">\n" +
-                "                <p>In seguito al monitoraggio dei mercati, il sistema ha rilevato variazioni anomale rispetto alle soglie da Lei impostate per l'account <strong>" + username + "</strong>.</p>\n" +
+                "                <p>In seguito al monitoraggio dei mercati energetici del " +
+                LocalDate.now().minusDays(1).format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) +
+                ", il sistema ha rilevato variazioni anomale rispetto alle soglie da Lei impostate per l'account <strong>" + username + "</strong>.</p>\n" +
                 "            </div>\n" +
                 "            <div class=\"summary-box\">\n" +
                 summaryContent.toString() +
@@ -147,7 +174,6 @@ public class EmailTemplateGenerator {
                 "</body>\n" +
                 "</html>";
     }
-
 
     public String generateWeeklyReport(String clientName, String username, List<Map<String, Object>> weeklyDataList) {
         // Organizzare i dati per tipo di prodotto

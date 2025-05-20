@@ -10,6 +10,7 @@ import org.miesgroup.emailbot.service.Futures.FuturesService;
 import org.miesgroup.emailbot.service.cliente.ClienteService;
 import org.miesgroup.emailbot.utils.CalendarUtils;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.*;
@@ -94,22 +95,9 @@ public class EmailService {
                         idUtente
                 )));
 
-        // Convert to list of maps for backwards compatibility
         return alerts.stream()
                 .map(AlertInfo::toMap)
                 .collect(Collectors.toList());
-    }
-
-    private Map<String, List<Map<String, Object>>> loadPreviousDayFutures() {
-        // In production, use: LocalDate yesterday = LocalDate.now().minusDays(1);
-        LocalDate yesterday = LocalDate.of(2025, 4, 10);
-
-        // Optimize by collecting all futures types in a single loop
-        return Map.of(
-                "Monthly", futuresService.getFuturesMonth(yesterday.toString()),
-                "Quarterly", futuresService.getFuturesQuarter(yesterday.toString()),
-                "Yearly", futuresService.getFuturesYear(yesterday.toString())
-        );
     }
 
     private String generateFutureLabel(String type, Map<String, Object> future) {
@@ -178,18 +166,29 @@ public class EmailService {
 
 
     public void sendDailyEmail() {
-        //LocalDate checkDate = LocalDate.of(2025, 4, 10); // For simulation
-        LocalDate checkDate = LocalDate.now(); // For production
-        LocalDate dayBeforeCheckDate = checkDate.minusDays(1);
+        LocalDate today = LocalDate.now();
+        LocalDate yesterday = today.minusDays(1);
+        LocalDate previousWorkingDay = findPreviousWorkingDay(yesterday);
 
-        // Carico i dati dei futures del giorno di controllo
-        Map<String, List<Map<String, Object>>> futuresByType = loadPreviousDayFutures();
+        // Per la simulazione possiamo usare date specifiche (commentare in produzione)
+        //yesterday = LocalDate.of(2025, 4, 8); // Per simulare "ieri"
+        //previousWorkingDay = findPreviousWorkingDay(yesterday); // Calcola il giorno lavorativo precedente
 
-        // Carico anche i dati del giorno precedente, che serviranno solo in modalità percentuale
-        Map<String, List<Map<String, Object>>> dayBeforeFuturesByType = Map.of(
-                "Monthly", futuresService.getFuturesMonth(dayBeforeCheckDate.toString()),
-                "Quarterly", futuresService.getFuturesQuarter(dayBeforeCheckDate.toString()),
-                "Yearly", futuresService.getFuturesYear(dayBeforeCheckDate.toString())
+        System.out.println("📅 Analisi: confronto tra " + yesterday + " (ieri) e " +
+                previousWorkingDay + " (giorno lavorativo precedente)");
+
+        // Carico i dati dei futures di "ieri" (i più recenti disponibili)
+        Map<String, List<Map<String, Object>>> futuresByType = Map.of(
+                "Monthly", futuresService.getFuturesMonth(yesterday.toString()),
+                "Quarterly", futuresService.getFuturesQuarter(yesterday.toString()),
+                "Yearly", futuresService.getFuturesYear(yesterday.toString())
+        );
+
+        // Carico i dati dei futures del giorno lavorativo precedente, che serviranno solo in modalità percentuale
+        Map<String, List<Map<String, Object>>> previousWorkingDayFuturesByType = Map.of(
+                "Monthly", futuresService.getFuturesMonth(previousWorkingDay.toString()),
+                "Quarterly", futuresService.getFuturesQuarter(previousWorkingDay.toString()),
+                "Yearly", futuresService.getFuturesYear(previousWorkingDay.toString())
         );
 
         List<Cliente> clients = clienteService.getClientsCheckEmail();
@@ -221,30 +220,30 @@ public class EmailService {
                 for (Map<String, Object> future : futuresList) {
                     Map<String, Object> dayBeforeFuture = null;
 
-                    // Se è in modalità variazione percentuale, devo trovare il dato corrispondente del giorno prima
+                    // Se è in modalità variazione percentuale, devo trovare il dato del giorno lavorativo precedente
                     if (checkModality) {
-                        List<Map<String, Object>> dayBeforeFuturesList = dayBeforeFuturesByType.get(futureType);
-                        if (dayBeforeFuturesList != null && !dayBeforeFuturesList.isEmpty()) {
-                            // Cerca il future corrispondente del giorno precedente
-                            Optional<Map<String, Object>> matchingDayBeforeFuture = dayBeforeFuturesList.stream()
+                        List<Map<String, Object>> previousWorkingDayFuturesList = previousWorkingDayFuturesByType.get(futureType);
+                        if (previousWorkingDayFuturesList != null && !previousWorkingDayFuturesList.isEmpty()) {
+                            // Cerca il future corrispondente del giorno lavorativo precedente
+                            Optional<Map<String, Object>> matchingPreviousWorkingDayFuture = previousWorkingDayFuturesList.stream()
                                     .filter(dbf -> matchFutures(futureType, future, dbf))
                                     .findFirst();
 
-                            if (matchingDayBeforeFuture.isPresent()) {
-                                dayBeforeFuture = matchingDayBeforeFuture.get();
+                            if (matchingPreviousWorkingDayFuture.isPresent()) {
+                                dayBeforeFuture = matchingPreviousWorkingDayFuture.get();
                             } else {
-                                System.out.println("⚠️ Nessun dato del giorno precedente trovato per: " +
+                                System.out.println("⚠️ Nessun dato del giorno lavorativo precedente (" + previousWorkingDay + ") trovato per: " +
                                         generateFutureLabel(futureType, future) + " (necessario per modalità percentuale)");
                                 continue; // Skip this future
                             }
                         } else {
-                            System.out.println("⚠️ Nessun dato del giorno precedente disponibile per il tipo: " +
+                            System.out.println("⚠️ Nessun dato del giorno lavorativo precedente (" + previousWorkingDay + ") disponibile per il tipo: " +
                                     futureType + " (necessario per modalità percentuale)");
                             continue; // Skip this future type
                         }
                     }
 
-                    // Chiama la funzione di controllo che gestirà autonomamente i casi con dayBeforeFuture null
+                    // Chiama la funzione di controllo che gestirà i casi con dayBeforeFuture null
                     Optional<Map<String, Object>> alertResult = checkPriceThreshold(
                             futureType,
                             future,
@@ -253,7 +252,6 @@ public class EmailService {
                             max,
                             checkModality
                     );
-
                     alertResult.ifPresent(alertEntry -> {
                         String futureLabel = (String) alertEntry.get("futureLabel");
                         double price = (double) alertEntry.get("price");
@@ -283,6 +281,23 @@ public class EmailService {
                 System.out.println("📧 Email inviata a: " + cliente.getEmail());
             }
         }
+    }
+
+    private LocalDate findPreviousWorkingDay(LocalDate date) {
+        LocalDate previousDay = date.minusDays(1);
+
+        // Se il giorno precedente è domenica, torniamo a venerdì
+        if (previousDay.getDayOfWeek() == DayOfWeek.SUNDAY) {
+            return previousDay.minusDays(2); // Da domenica torna a venerdì
+        }
+
+        // Se il giorno precedente è sabato, torniamo a venerdì
+        if (previousDay.getDayOfWeek() == DayOfWeek.SATURDAY) {
+            return previousDay.minusDays(1); // Da sabato torna a venerdì
+        }
+
+        // Altrimenti è già un giorno lavorativo
+        return previousDay;
     }
 
     private Map<String, List<Map<String, Object>>> groupFuturesByType(List<Map<String, Object>> futures) {
