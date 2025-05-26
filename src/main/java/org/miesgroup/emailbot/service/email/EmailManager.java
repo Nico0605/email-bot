@@ -15,15 +15,7 @@ public class EmailManager {
     EmailService emailService;
 
     public void DailyEmailAlert() {
-        LocalDate today = LocalDate.now();
-        DayOfWeek day = today.getDayOfWeek();
-
-        if (day != DayOfWeek.SUNDAY && day != DayOfWeek.MONDAY) {
-            LOGGER.info("📨 Avvio invio email giornaliera (oggi è " + day + ")");
-            emailService.sendDailyEmail();
-        } else {
-            LOGGER.error("⛔ Invio email giornaliera disattivato (oggi è " + day + ")");
-        }
+        emailService.sendDailyEmail();
     }
 
     public void WeeklyEmailAlert() {

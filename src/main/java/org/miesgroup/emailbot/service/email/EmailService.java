@@ -17,6 +17,8 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static io.quarkus.arc.impl.UncaughtExceptions.LOGGER;
+
 @ApplicationScoped
 public class EmailService {
 
@@ -174,9 +176,6 @@ public class EmailService {
         //yesterday = LocalDate.of(2025, 4, 8); // Per simulare "ieri"
         //previousWorkingDay = findPreviousWorkingDay(yesterday); // Calcola il giorno lavorativo precedente
 
-        System.out.println("📅 Analisi: confronto tra " + yesterday + " (ieri) e " +
-                previousWorkingDay + " (giorno lavorativo precedente)");
-
         // Carico i dati dei futures di "ieri" (i più recenti disponibili)
         Map<String, List<Map<String, Object>>> futuresByType = Map.of(
                 "Monthly", futuresService.getFuturesMonth(yesterday.toString()),
@@ -184,7 +183,7 @@ public class EmailService {
                 "Yearly", futuresService.getFuturesYear(yesterday.toString())
         );
 
-        // Carico i dati dei futures del giorno lavorativo precedente, che serviranno solo in modalità percentuale
+        // Carico i dati dei futures del giorno lavorativo precedente, serviranno solo per modalità percentuale
         Map<String, List<Map<String, Object>>> previousWorkingDayFuturesByType = Map.of(
                 "Monthly", futuresService.getFuturesMonth(previousWorkingDay.toString()),
                 "Quarterly", futuresService.getFuturesQuarter(previousWorkingDay.toString()),
@@ -192,15 +191,24 @@ public class EmailService {
         );
 
         List<Cliente> clients = clienteService.getClientsCheckEmail();
+        System.out.println("Clienti trovati: " + (clients != null ? clients.size() : "null"));
+
+        if (clients == null || clients.isEmpty()) {
+            System.out.println("⚠️ Nessun cliente trovato per l'invio email");
+            return;
+        }
 
         for (Cliente cliente : clients) {
+            System.out.println("Elaboro cliente: " + cliente.getUsername());
             int userId = cliente.getId();
             List<Map<String, Object>> alertData = checkUserAlertFillField(userId);
 
             if (alertData.isEmpty()) {
+                System.out.println("⚠️ Nessun alert configurato per l'utente: " + cliente.getUsername());
                 continue;
             }
 
+            System.out.println("📋 Trovati " + alertData.size() + " alert per l'utente: " + cliente.getUsername());
             List<Map<String, Object>> triggeredAlerts = new ArrayList<>();
 
             // Process each alert configuration
@@ -211,17 +219,40 @@ public class EmailService {
                 double min = (double) alert.get("minPriceValue");
                 boolean checkModality = (boolean) alert.get("checkModality");
 
+                // Controllo del giorno della settimana globale
+                DayOfWeek day = today.getDayOfWeek();
+                if ((day == DayOfWeek.SUNDAY || day == DayOfWeek.MONDAY) && checkModality) {
+                    LOGGER.error("⛔ Invio email giornaliera disattivato (oggi è " + day + ")");
+                    return; // Esci dalla funzione se è domenica o lunedì
+                } else if (day == DayOfWeek.SUNDAY) {
+                    LOGGER.error("⛔ Invio email giornaliera disattivato (oggi è " + day + ")");
+                    return; // Esci dalla funzione se è domenica o lunedì
+                }
+
+                LOGGER.info("📨 Avvio invio email giornaliera (oggi è " + day + ")");
+
+                System.out.println("🔍 Elaboro alert: " + alertType +
+                        ", checkModality: " + checkModality +
+                        ", min: " + min +
+                        ", max: " + max);
+
+                // Recupera la lista dei futures per questo tipo
                 List<Map<String, Object>> futuresList = futuresByType.get(futureType);
                 if (futuresList == null || futuresList.isEmpty()) {
                     System.out.println("⚠️ Nessun dato disponibile per il tipo: " + futureType);
                     continue;
                 }
 
+                System.out.println("📊 Trovati " + futuresList.size() + " futures di tipo " + futureType);
+
+                // Elabora ogni future di questo tipo
                 for (Map<String, Object> future : futuresList) {
                     Map<String, Object> dayBeforeFuture = null;
 
-                    // Se è in modalità variazione percentuale, devo trovare il dato del giorno lavorativo precedente
+                    // Solo se è in modalità percentuale, recupera i dati del giorno precedente
                     if (checkModality) {
+                        System.out.println("📈 Modalità percentuale: cerco dati del giorno precedente");
+
                         List<Map<String, Object>> previousWorkingDayFuturesList = previousWorkingDayFuturesByType.get(futureType);
                         if (previousWorkingDayFuturesList != null && !previousWorkingDayFuturesList.isEmpty()) {
                             // Cerca il future corrispondente del giorno lavorativo precedente
@@ -231,6 +262,7 @@ public class EmailService {
 
                             if (matchingPreviousWorkingDayFuture.isPresent()) {
                                 dayBeforeFuture = matchingPreviousWorkingDayFuture.get();
+                                System.out.println("✅ Trovato dato del giorno precedente per: " + generateFutureLabel(futureType, future));
                             } else {
                                 System.out.println("⚠️ Nessun dato del giorno lavorativo precedente (" + previousWorkingDay + ") trovato per: " +
                                         generateFutureLabel(futureType, future) + " (necessario per modalità percentuale)");
@@ -241,23 +273,26 @@ public class EmailService {
                                     futureType + " (necessario per modalità percentuale)");
                             continue; // Skip this future type
                         }
+                    } else {
+                        System.out.println("💰 Modalità valore assoluto: controllo diretto con soglie");
                     }
 
-                    // Chiama la funzione di controllo che gestirà i casi con dayBeforeFuture null
+                    // Chiama la funzione di controllo che gestirà entrambe le modalità
                     Optional<Map<String, Object>> alertResult = checkPriceThreshold(
                             futureType,
                             future,
-                            dayBeforeFuture,
+                            dayBeforeFuture, // null se checkModality == false
                             min,
                             max,
                             checkModality
                     );
+
                     alertResult.ifPresent(alertEntry -> {
                         String futureLabel = (String) alertEntry.get("futureLabel");
                         double price = (double) alertEntry.get("price");
                         double variation = (double) alertEntry.get("variation");
 
-                        System.out.println("⚠️ ALERT: Cliente " + cliente.getUsername() +
+                        System.out.println("⚠️ ALERT SCATENATO: Cliente " + cliente.getUsername() +
                                 ", tipo: " + futureType + " (" + futureLabel + "), prezzo fuori soglia (" +
                                 price + "), variazione: " + String.format("%.1f", variation) + "%");
 
@@ -268,6 +303,8 @@ public class EmailService {
 
             // Send email if there are alerts to report
             if (!triggeredAlerts.isEmpty()) {
+                System.out.println("📧 Invio email con " + triggeredAlerts.size() + " alert a: " + cliente.getEmail());
+
                 String htmlBody = emailTempGen.generateAlertEmail(
                         cliente.getUsername(),
                         cliente.getUsername(),
@@ -278,9 +315,13 @@ public class EmailService {
                         Mail.withHtml(cliente.getEmail(), "⚠️ Alert giornalieri sui futures", htmlBody)
                 );
 
-                System.out.println("📧 Email inviata a: " + cliente.getEmail());
+                System.out.println("✅ Email inviata con successo a: " + cliente.getEmail());
+            } else {
+                System.out.println("ℹ️ Nessun alert scatenato per l'utente: " + cliente.getUsername());
             }
         }
+
+        System.out.println("🏁 Elaborazione email giornaliere completata");
     }
 
     private LocalDate findPreviousWorkingDay(LocalDate date) {
