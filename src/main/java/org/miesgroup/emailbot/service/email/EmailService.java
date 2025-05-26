@@ -169,8 +169,12 @@ public class EmailService {
 
     public void sendDailyEmail() {
         LocalDate today = LocalDate.now();
-        LocalDate yesterday = today.minusDays(1);
-        LocalDate previousWorkingDay = findPreviousWorkingDay(yesterday);
+
+        // Trova l'ultimo giorno lavorativo (per i dati più recenti)
+        LocalDate lastWorkingDay = findLastWorkingDay(today);
+
+        // Trova il giorno lavorativo precedente a quello (per i confronti percentuali)
+        LocalDate previousWorkingDay = findPreviousWorkingDay(lastWorkingDay);
 
         // Per la simulazione possiamo usare date specifiche (commentare in produzione)
         //yesterday = LocalDate.of(2025, 4, 8); // Per simulare "ieri"
@@ -178,9 +182,9 @@ public class EmailService {
 
         // Carico i dati dei futures di "ieri" (i più recenti disponibili)
         Map<String, List<Map<String, Object>>> futuresByType = Map.of(
-                "Monthly", futuresService.getFuturesMonth(yesterday.toString()),
-                "Quarterly", futuresService.getFuturesQuarter(yesterday.toString()),
-                "Yearly", futuresService.getFuturesYear(yesterday.toString())
+                "Monthly", futuresService.getFuturesMonth(lastWorkingDay.toString()),
+                "Quarterly", futuresService.getFuturesQuarter(lastWorkingDay.toString()),
+                "Yearly", futuresService.getFuturesYear(lastWorkingDay.toString())
         );
 
         // Carico i dati dei futures del giorno lavorativo precedente, serviranno solo per modalità percentuale
@@ -311,11 +315,20 @@ public class EmailService {
                         triggeredAlerts
                 );
 
-                mailer.send(
-                        Mail.withHtml(cliente.getEmail(), "⚠️ Alert giornalieri sui futures", htmlBody)
-                );
+                System.out.println("✅ HTML generato, lunghezza: " + htmlBody.length());
+                System.out.println("📤 Tentativo invio email...");
 
-                System.out.println("✅ Email inviata con successo a: " + cliente.getEmail());
+                try {
+                    mailer.send(
+                            Mail.withHtml(cliente.getEmail(), "⚠️ Alert giornalieri sui futures", htmlBody)
+                    );
+                    System.out.println("✅ Email inviata con successo a: " + cliente.getEmail());
+                } catch (Exception e) {
+                    System.out.println("❌ ERRORE nell'invio email: " + e.getMessage());
+                    e.printStackTrace();
+                }
+
+                System.out.println("📬 Processo invio email completato");
             } else {
                 System.out.println("ℹ️ Nessun alert scatenato per l'utente: " + cliente.getUsername());
             }
@@ -339,6 +352,23 @@ public class EmailService {
 
         // Altrimenti è già un giorno lavorativo
         return previousDay;
+    }
+
+    private LocalDate findLastWorkingDay(LocalDate date) {
+        LocalDate checkDate = date.minusDays(1); // Partiamo da ieri
+
+        // Se ieri era domenica, andiamo a venerdì
+        if (checkDate.getDayOfWeek() == DayOfWeek.SUNDAY) {
+            return checkDate.minusDays(2); // Da domenica torna a venerdì
+        }
+
+        // Se ieri era sabato, andiamo a venerdì
+        if (checkDate.getDayOfWeek() == DayOfWeek.SATURDAY) {
+            return checkDate.minusDays(1); // Da sabato torna a venerdì
+        }
+
+        // Altrimenti ieri era già un giorno lavorativo
+        return checkDate;
     }
 
     private Map<String, List<Map<String, Object>>> groupFuturesByType(List<Map<String, Object>> futures) {
